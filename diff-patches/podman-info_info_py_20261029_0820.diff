@@ -1,0 +1,40 @@
+--- a/src/terok_shield/podman_info/info.py
++++ b/src/terok_shield/podman_info/info.py
+@@ -25,7 +25,8 @@ class PodmanInfo:
+     version: tuple[int, ...]
+     rootless_network_cmd: str
+     pasta_executable: str
+     slirp4netns_executable: str
++    rootless: bool = True
+ 
+     @property
+     def network_mode(self) -> str:
+@@ -34,6 +35,13 @@ class PodmanInfo:
+         Uses ``rootlessNetworkCmd`` when available (podman 5+).
+         When absent (podman 4.x), defaults to slirp4netns if its
+         executable is available — podman 4.x defaults to slirp4netns.
++
++        Rootful engines always use the default bridge network, so
++        ``rootless=False`` short-circuits to ``"bridge"`` regardless of
++        ``rootlessNetworkCmd`` (which podman still reports on rootful
++        hosts even though it is unused there).
+         """
++        if not self.rootless:
++            return "bridge"
+         if self.rootless_network_cmd in ("pasta", "slirp4netns"):
+             return self.rootless_network_cmd
+         # Field absent → podman 4.x → default is slirp4netns
+@@ -68,10 +76,12 @@ def parse_podman_info(json_str: str) -> PodmanInfo:
+     host = _as_dict(info.get("host"))
+     version_section = _as_dict(info.get("version"))
+     pasta = _as_dict(host.get("pasta"))
+     slirp = _as_dict(host.get("slirp4netns"))
++    security = _as_dict(host.get("security"))
+ 
+     return PodmanInfo(
+         version=_parse_version(_as_str(version_section.get("Version"), "0")),
+         rootless_network_cmd=_as_str(host.get("rootlessNetworkCmd")),
+         pasta_executable=_as_str(pasta.get("executable")),
+         slirp4netns_executable=_as_str(slirp.get("executable")),
++        rootless=bool(security.get("rootless", True)),
+     )

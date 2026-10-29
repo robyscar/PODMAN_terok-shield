@@ -1,0 +1,16 @@
+fix(podman_info): detect rootful bridge instead of defaulting to pasta
+
+Rootful engines report rootlessNetworkCmd even though it is unused,
+and host.security.rootless=false was ignored. network_mode therefore
+fell through to "pasta", so _upstream_dns_for_mode returned PASTA_DNS
+(169.254.1.1) — unreachable from a bridge netns, leaving dnsmasq
+unable to forward and containers unable to resolve any name.
+
+- PodmanInfo gains rootless (default True for backward compatibility)
+- network_mode returns "bridge" when rootful
+- _upstream_dns_for_mode("bridge") reads the host's /etc/resolv.conf
+- _gateways_for_mode("bridge") returns ("", "")
+- drop the `or "pasta"` fallback that masked the misclassification
+
+Repro: rootful podman machine, terok-shield run <ctr> -- alpine wget https://pypi.org
+Before: wget: bad address 'pypi.org'. After: resolves.

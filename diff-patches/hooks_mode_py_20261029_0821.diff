@@ -1,0 +1,46 @@
+--- a/src/terok_shield/hooks/mode.py
++++ b/src/terok_shield/hooks/mode.py
+@@ -168,7 +168,7 @@ class HookMode:
+         dnsmasq_bin = dnsmasq.locate(self._config.dnsmasq_path, self._runner)
+         tier = self._detect_dns_tier(container, sd, dnsmasq_bin)
+-        mode = info.network_mode or "pasta"
++        mode = info.network_mode
+         upstream_dns = _upstream_dns_for_mode(mode)
+         gw_v4, gw_v6 = self._gateways = _gateways_for_mode(mode)
+ 
+@@ -1010,8 +1010,21 @@ def _upstream_dns_for_mode(network_mode: str) -> str:
+     if network_mode == "slirp4netns":
+         return SLIRP4NETNS_DNS
+     if network_mode == "pasta":
+         return PASTA_DNS
++    if network_mode == "bridge":
++        # Rootful engines land on the default bridge network; the upstream
++        # forwarder is whatever the host resolver itself uses.  Host facts
++        # are read at launch time — no hardcoded address survives a
++        # resolv.conf change or a different WSL/Hyper-V host.
++        try:
++            resolv_text = Path("/etc/resolv.conf").read_text()
++        except OSError:
++            resolv_text = ""
++        upstream = parse_resolv_conf(resolv_text)
++        if not upstream:
++            raise ValueError(
++                "Cannot determine upstream DNS for network mode 'bridge': "
++                "no usable nameserver found in /etc/resolv.conf."
++            )
++        return upstream
+     raise ValueError(
+         f"Cannot determine upstream DNS for network mode {network_mode!r}. "
+         "Add support for this mode in _upstream_dns_for_mode()."
+     )
+@@ -1028,6 +1041,8 @@ def _gateways_for_mode(network_mode: str) -> tuple[str, str]:
+     if network_mode == "slirp4netns":
+         return slirp4netns_gateway(), SLIRP4NETNS_GATEWAY_V6
+     if network_mode == "pasta":
+         return "", ""
++    if network_mode == "bridge":
++        return "", ""
+     raise ValueError(
+         f"Cannot determine gateways for network mode {network_mode!r}. "
+         "Add support for this mode in _gateways_for_mode()."
+     )
